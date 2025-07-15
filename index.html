@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Malla Interactiva - Tu Carrera</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background-color: #f2f2f2; }
+    h1 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    tr.bloqueada { background-color: #ffe6e6; }
+    tr.disponible { background-color: #e6ffe6; }
+    tr.completada { background-color: #d0d0d0; text-decoration: line-through; }
+    button { padding: 5px 10px; }
+  </style>
+</head>
+<body>
+
+  <h1>Malla Interactiva - Tu Carrera</h1>
+  <p>Haz clic en una materia para marcarla como completada. Se desbloquearán automáticamente las que dependan de ella.</p>
+  <table id="tabla">
+    <thead>
+      <tr>
+        <th>N.º</th>
+        <th>Ciclo</th>
+        <th>Materia</th>
+        <th>UV</th>
+        <th>Prerrequisitos</th>
+        <th>Estado</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const estadoMaterias = JSON.parse(localStorage.getItem('estadoMaterias') || '{}');
+    let materias = [];
+
+    async function cargarCSV() {
+      const respuesta = await fetch('materias.csv');
+      const texto = await respuesta.text();
+      const filas = texto.trim().split('\n');
+      const encabezados = filas.shift().split(',');
+      materias = filas.map(fila => {
+        const datos = fila.split(',');
+        const obj = {};
+        encabezados.forEach((key, i) => obj[key.trim()] = datos[i]?.trim());
+        obj.id = obj.numero;
+        obj.estado = estadoMaterias[obj.id] || 'bloqueada';
+        return obj;
+      });
+      actualizarEstados();
+      renderTabla();
+    }
+
+    function actualizarEstados() {
+      materias.forEach(m => {
+        if (m.estado === 'completada') return;
+        if (!m.prerequisitos || m.prerequisitos === '-') {
+          m.estado = 'disponible';
+        } else {
+          const requisitos = m.prerequisitos.split(';').map(x => x.trim());
+          const completos = requisitos.every(req => {
+            const encontrada = materias.find(mat => mat.nombre === req);
+            return encontrada && encontrada.estado === 'completada';
+          });
+          m.estado = completos ? 'disponible' : 'bloqueada';
+        }
+      });
+    }
+
+    function renderTabla() {
+      const cuerpo = document.querySelector('#tabla tbody');
+      cuerpo.innerHTML = '';
+      materias.forEach(m => {
+        const fila = document.createElement('tr');
+        fila.className = m.estado;
+        fila.innerHTML = `
+          <td>${m.numero}</td>
+          <td>${m.ciclo}</td>
+          <td>${m.nombre}</td>
+          <td>${m.uv}</td>
+          <td>${m.prerequisitos || '-'}</td>
+          <td>
+            <button onclick="marcar('${m.id}')">${m.estado === 'completada' ? 'Desmarcar' : 'Marcar'}</button>
+          </td>
+        `;
+        cuerpo.appendChild(fila);
+      });
+    }
+
+    function marcar(id) {
+      const materia = materias.find(m => m.id === id);
+      materia.estado = (materia.estado === 'completada') ? 'disponible' : 'completada';
+      estadoMaterias[id] = materia.estado;
+      localStorage.setItem('estadoMaterias', JSON.stringify(estadoMaterias));
+      actualizarEstados();
+      renderTabla();
+    }
+
+    cargarCSV();
+  </script>
+</body>
+</html>
